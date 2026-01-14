@@ -9,13 +9,23 @@ st.set_page_config(page_title="정신건강 데이터셋 분석", layout="wide")
 
 @st.cache_data
 def load_data():
-    file_path = '260111_data.xlsx'
+    # 파일명을 저장소에 올린 이름과 정확히 일치시켜주세요. (예: data.xlsx)
+    file_name = "(26-01-11)data.xlsx" 
+    
+    # 서버 환경에서 경로를 더 정확히 잡기 위한 로직
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(current_dir, file_name)
+    if not os.path.exists(file_path):
+        file_path = file_name
+
     try:
         df_sido = pd.read_excel(file_path, sheet_name="시도")
         df_sigungu = pd.read_excel(file_path, sheet_name="시군구")
         return df_sido, df_sigungu
     except Exception as e:
-        st.error(f"파일을 읽는 중 오류 발생: {e}")
+        st.error(f"❌ 파일을 찾을 수 없거나 읽는 중 오류가 발생했습니다: {e}")
+        # 현재 폴더에 어떤 파일이 있는지 출력 (디버깅용)
+        st.info(f"현재 폴더 파일 목록: {os.listdir('.')}")
         return None, None
 
 df_sido, df_sigungu = load_data()
