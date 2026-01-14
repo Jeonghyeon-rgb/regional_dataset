@@ -9,7 +9,7 @@ st.set_page_config(page_title="정신건강 데이터셋 분석", layout="wide")
 
 @st.cache_data
 def load_data():
-    file_path = '/Users/jeonghyeonkim/Library/CloudStorage/GoogleDrive-jeonghkim0@gmail.com/내 드라이브/4. 서울대학교/강상경교수님TA/3. 강교수님 요청사항/지역데이터 구축관련/(26-01-11)지역데이터_시도.xlsx'
+    file_path = "(26-01-11)지역데이터_시도.xlsx"
     try:
         df_sido = pd.read_excel(file_path, sheet_name="시도")
         df_sigungu = pd.read_excel(file_path, sheet_name="시군구")
