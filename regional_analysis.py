@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import re
+import os
 
 # --- 1. 페이지 설정 및 데이터 로드 ---
 st.set_page_config(page_title="정신건강 데이터셋 분석", layout="wide")
