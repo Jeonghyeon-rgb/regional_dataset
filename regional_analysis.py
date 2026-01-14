@@ -9,7 +9,7 @@ st.set_page_config(page_title="정신건강 데이터셋 분석", layout="wide")
 
 @st.cache_data
 def load_data():
-    file_path = "(26-01-11)data.xlsx"
+    file_path = '260111_data.xlsx'
     try:
         df_sido = pd.read_excel(file_path, sheet_name="시도")
         df_sigungu = pd.read_excel(file_path, sheet_name="시군구")
