@@ -10,7 +10,7 @@ st.set_page_config(page_title="정신건강 데이터셋 분석", layout="wide")
 
 @st.cache_data
 def load_data():
-    file_name = "260111_data22.xlsx" 
+    file_name = "260111_data.xlsx" 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(current_dir, file_name)
     if not os.path.exists(file_path):
