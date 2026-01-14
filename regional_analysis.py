@@ -10,7 +10,7 @@ st.set_page_config(page_title="정신건강 데이터셋 분석", layout="wide")
 @st.cache_data
 def load_data():
     # 파일명을 저장소에 올린 이름과 정확히 일치시켜주세요. (예: data.xlsx)
-    file_name = "(26-01-11)data.xlsx" 
+    file_name = "260111_data.xlsx" 
     
     # 서버 환경에서 경로를 더 정확히 잡기 위한 로직
     current_dir = os.path.dirname(os.path.abspath(__file__))
