@@ -53,113 +53,91 @@ def get_unique_vars(keywords, df):
     matched = [c for c in df.columns if any(k in c for k in keywords)]
     return sorted(list(set([get_base_name(c) for c in matched])))
 
-# --- 3. 사이드바 설정 ---
-st.sidebar.title("🔍 분석 설정")
-region_level = st.sidebar.radio("분석 단위 선택", ["시도", "시군구"])
-current_df = df_sido if region_level == "시도" else df_sigungu
-loc_col = "시도" if region_level == "시도" else "시군구"
+# --- 3. 사이드바: 계층적 지역 선택 로직 ---
+st.sidebar.title("🔍 계층적 지역 선택")
 
-all_regions = sorted([str(x) for x in current_df[loc_col].unique() if pd.notna(x)])
-default_regions = ["전국", "서울특별시", "경기도"] if region_level == "시도" and "전국" in all_regions else [all_regions[0]]
-selected_regions = st.sidebar.multiselect("분석 대상 지역", all_regions, default=default_regions)
+# 1단계: 상위 시도 선택 (전국 포함)
+all_sidos = sorted([str(x) for x in df_sido['시도'].unique() if pd.notna(x)])
+selected_sido = st.sidebar.selectbox("대상 시도(광역) 선택", all_sidos, index=all_sidos.index("전국") if "전국" in all_sidos else 0)
 
-# --- 4. 메인 화면 지표 선택 ---
-st.title(f"📊 {region_level} 경제·사회·정신건강 통합 분석")
+# 2단계: 해당 시도에 속한 시군구 필터링
+if selected_sido == "전국":
+    sub_regions = []
+else:
+    # 시군구 데이터에서 선택한 시도에 해당하는 행만 필터링 (시군구별(1) 컬럼 기준)
+    sub_regions = sorted(df_sigungu[df_sigungu['시군구별(1)'] == selected_sido]['시군구'].unique().tolist())
+
+# 3단계: 최종 비교 대상 선택 (전국 + 선택한 시도 + 선택한 시군구들)
+st.sidebar.markdown("---")
+st.sidebar.subheader("📍 세부 비교 대상 설정")
+comparison_list = st.sidebar.multiselect(
+    "그래프에 표시할 지역을 선택하세요",
+    options=["전국"] + [selected_sido] + sub_regions if selected_sido != "전국" else all_sidos,
+    default=["전국", selected_sido] if selected_sido != "전국" else ["전국"]
+)
+
+# --- 4. 메인 화면: 지표 선택 ---
+st.title(f"📊 {selected_sido} 지역 심층 비교 분석")
+st.info("💡 전국 데이터, 광역 데이터(시도), 기초 데이터(시군구)를 한 그래프에서 직접 비교할 수 있습니다.")
 
 selected_all_vars = []
 cols = st.columns(3)
+# 시도와 시군구 컬럼이 모두 포함된 통합 풀(Pool)에서 지표 추출
+combined_cols_df = pd.concat([df_sido, df_sigungu], axis=1)
+
 for i, (cat_name, keywords) in enumerate(VARIABLES_MAP.items()):
-    if region_level == "시군구" and cat_name in ["3. 정신질환 치료 및 의료 이용", "4. 등록 장애인 현황"]: continue
     with cols[i % 3]:
         with st.expander(cat_name, expanded=True):
-            var_list = get_unique_vars(keywords, current_df)
+            var_list = get_unique_vars(keywords, combined_cols_df)
             for v in var_list:
-                if st.checkbox(v, key=f"chk_{region_level}_{v}"):
+                if st.checkbox(v, key=f"chk_{v}"):
                     selected_all_vars.append(v)
 
-st.divider()
-view_mode = st.radio("⚙️ 시각화 모드", ["선택 지역 평균 추이 (여러 지표 비교)", "지역별 개별 추이 (한 지표 집중 비교)"], horizontal=True)
-
-# --- 5. 데이터 처리 함수 ---
-def process_data_v2(df, regions, var_name, loc_column):
-    var_cols = [c for c in df.columns if get_base_name(c) == var_name]
-    if not var_cols: return pd.DataFrame()
-    temp = df[df[loc_column].isin(regions)][[loc_column] + var_cols]
-    melted = temp.melt(id_vars=[loc_column], var_name="item", value_name="value")
-    
-    def extract_year(text):
-        match = re.search(r'_(\d{2,4})', text)
-        if match:
-            y = match.group(1)
-            full_year = f"20{y}" if len(y) == 2 and int(y) < 50 else y
-            return int(full_year)
-        return None
-        
-    melted['year'] = melted['item'].apply(extract_year)
-    melted['value'] = pd.to_numeric(melted['value'], errors='coerce')
-    return melted.dropna(subset=['year', 'value']).sort_values('year')
-
-# --- 6. 시각화 실행 (전국값 우선 로직 적용) ---
-if selected_all_vars and selected_regions:
+# --- 5. 시각화 로직 ---
+if selected_all_vars and comparison_list:
     fig = go.Figure()
-    colors = px.colors.qualitative.Bold
+    
+    # 지표는 한 번에 하나씩 개별 비교하는 모드가 적합 (스케일 문제 예방)
+    target_var = selected_all_vars[0]
+    
+    for reg in comparison_list:
+        # 1. 시도 데이터셋에서 검색
+        data = process_data_v2(df_sido, [reg], target_var, "시도")
+        
+        # 2. 시도에 없으면 시군구 데이터셋에서 검색
+        if data.empty:
+            data = process_data_v2(df_sigungu, [reg], target_var, "시군구")
+        
+        # 3. 만약 '전국'인데 값이 없다면? (사용자 요청: 전국값 없을 시 평균 제시)
+        if reg == "전국" and (data.empty or data['value'].isnull().all()):
+            # 시도 데이터셋의 전체 평균 계산 (전국 행 제외)
+            all_sido_data = process_data_v2(df_sido, [s for s in all_sidos if s != "전국"], target_var, "시도")
+            if not all_sido_data.empty:
+                data = all_sido_data.groupby('year')['value'].mean().reset_index()
+                data['시도'] = "전국(시도평균)"
+                reg_label = "전국(시도평균)"
+            else:
+                continue
+        else:
+            reg_label = reg
 
-    if "평균 추이" in view_mode:
-        for i, var in enumerate(selected_all_vars):
-            # 1. 선택된 지역 데이터 가져오기
-            data_selected = process_data_v2(current_df, selected_regions, var, loc_col)
-            # 2. '전국' 데이터 별도로 가져오기 (선택 여부와 상관없이)
-            data_national = process_data_v2(current_df, ["전국"], var, loc_col)
-            
-            if data_selected.empty: continue
-            
-            years = sorted(data_selected['year'].unique())
-            final_values = []
-            trace_name_suffix = ""
-
-            for year in years:
-                # 해당 연도의 전국 데이터 확인
-                nat_val = data_national[data_national['year'] == year]['value']
-                
-                if not nat_val.empty and pd.notna(nat_val.values[0]):
-                    # 전국 데이터가 있으면 사용
-                    final_values.append(nat_val.values[0])
-                    trace_name_suffix = "(전국)"
-                else:
-                    # 전국 데이터가 없으면 선택된 지역(전국 제외)의 평균 계산
-                    mean_val = data_selected[(data_selected['year'] == year) & (data_selected[loc_col] != "전국")]['value'].mean()
-                    final_values.append(mean_val)
-                    if not trace_name_suffix: trace_name_suffix = "(지역평균)"
-
-            # 그래프 추가
-            yaxis_type = "y2" if i >= 1 else "y"
+        if not data.empty:
             fig.add_trace(go.Scatter(
-                x=years, y=final_values, 
-                name=f"{var} {trace_name_suffix}", 
+                x=data['year'], 
+                y=data['value'], 
+                name=reg_label, 
                 mode='lines+markers',
-                yaxis=yaxis_type,
-                line=dict(width=3, color=colors[i % len(colors)])
+                line=dict(width=4 if "전국" in reg_label else 2) # 전국선은 두껍게
             ))
-            
-        layout_update = {
-            "xaxis": dict(title="연도", dtick=1),
-            "yaxis": dict(title=selected_all_vars[0], side="left", showgrid=True),
-            "hovermode": "x unified", "template": "plotly_white",
-            "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        }
-        if len(selected_all_vars) >= 2:
-            layout_update["yaxis2"] = dict(title=selected_all_vars[1], anchor="x", overlaying="y", side="right", showgrid=False)
-        fig.update_layout(**layout_update)
 
-    else:
-        # 지역별 개별 비교 (기존과 동일)
-        target_var = selected_all_vars[0]
-        data = process_data_v2(current_df, selected_regions, target_var, loc_col)
-        for i, reg in enumerate(selected_regions):
-            reg_data = data[data[loc_col] == reg].sort_values('year')
-            fig.add_trace(go.Scatter(x=reg_data['year'], y=reg_data['value'], name=reg, mode='lines+markers'))
-        fig.update_layout(title=f"지역별 {target_var} 추이", xaxis=dict(dtick=1), template="plotly_white")
-
+    fig.update_layout(
+        title=f"<b>{target_var}</b> 추이 비교 ({', '.join(comparison_list)})",
+        xaxis=dict(title="연도", dtick=1),
+        yaxis=dict(title="지표 값", autorange=True),
+        hovermode="x unified",
+        template="plotly_white",
+        height=600
+    )
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.info("💡 지역과 지표를 선택해 주세요.")
+    st.info("💡 왼쪽 사이드바에서 비교할 지역을 선택하고, 위에서 분석 지표를 클릭하세요.")
