@@ -9,23 +9,29 @@ import os
 st.set_page_config(page_title="지역별 정신건강 데이터 분석 시스템", layout="wide")
 
 @st.cache_data
+@st.cache_data
 def load_data():
-    # 업로드하신 최신 파일명으로 변경
+    # [주의] 깃허브에 업로드된 파일명과 100% 일치해야 합니다. (확장자 xlsx 확인)
+    # 괄호나 공백이 있다면 영문/숫자로 단순화하는 것이 가장 좋습니다.
     file_name = "(26-02-23)regional_data.xlsx" 
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(current_dir, file_name)
     
-    # 로컬 경로에 없으면 현재 작업 디렉토리에서 확인
+    # 현재 파일(app.py)의 디렉토리 절대 경로를 가져옵니다.
+    base_path = os.path.dirname(__file__)
+    file_path = os.path.join(base_path, file_name)
+
+    # 디버깅: 파일이 없을 경우 현재 위치에 어떤 파일들이 있는지 보여줍니다.
     if not os.path.exists(file_path):
-        file_path = file_name
+        st.error(f"❌ 파일을 찾을 수 없습니다: {file_name}")
+        st.write("📂 현재 리포지토리 폴더 내 파일 목록:", os.listdir(base_path))
+        return None, None
 
     try:
-        # 시도/시군구 시트 로드
-        df_sido = pd.read_excel(file_path, sheet_name="시도")
-        df_sigungu = pd.read_excel(file_path, sheet_name="시군구")
+        # engine='openpyxl'을 명시적으로 추가하면 엑셀을 더 잘 읽습니다.
+        df_sido = pd.read_excel(file_path, sheet_name="시도", engine='openpyxl')
+        df_sigungu = pd.read_excel(file_path, sheet_name="시군구", engine='openpyxl')
         return df_sido, df_sigungu
     except Exception as e:
-        st.error(f"❌ 파일을 읽는 중 오류 발생: {e}")
+        st.error(f"❌ 엑셀 파일을 읽는 중 오류 발생: {e}")
         return None, None
 
 df_sido, df_sigungu = load_data()
