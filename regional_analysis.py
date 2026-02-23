@@ -11,7 +11,7 @@ st.set_page_config(page_title="지역별 정신건강 데이터 분석 시스템
 @st.cache_data
 def load_data():
     # 업로드하신 최신 파일명으로 변경
-    file_name = "(26-02-23)지역데이터_시도-전국포함.xlsx" 
+    file_name = "(26-02-23)regional_data.xlsx" 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(current_dir, file_name)
     
