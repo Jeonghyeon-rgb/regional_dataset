@@ -84,27 +84,25 @@ view_mode = st.radio("⚙️ 시각화 모드", ["선택 지역 평균 추이 (�
 
 # --- 5. 데이터 처리 함수 (연도 중간/끝 모두 대응) ---
 def process_data_v2(df, regions, var_name, loc_column):
-    """선택한 지표명에 해당하는 연도별 컬럼들을 추출하여 Long Format으로 변환"""
-    # 연도를 제거했을 때 선택한 지표명과 일치하는 컬럼 찾기
     var_cols = [c for c in df.columns if get_base_name(c) == var_name]
-    
     if not var_cols: return pd.DataFrame()
 
-    # 데이터 추출 및 변환
     temp = df[df[loc_column].isin(regions)][[loc_column] + var_cols]
     melted = temp.melt(id_vars=[loc_column], var_name="item", value_name="value")
     
-    # 연도 추출 로직
     def extract_year(text):
         match = re.search(r'_(\d{2,4})', text)
         if match:
             y = match.group(1)
-            return f"20{y}" if len(y) == 2 and int(y) < 50 else y
+            # 2자리 연도 처리 (21 -> 2021)
+            full_year = f"20{y}" if len(y) == 2 and int(y) < 50 else y
+            return int(full_year)  # [중요] 여기서 정수(int)로 변환합니다!
         return None
         
     melted['year'] = melted['item'].apply(extract_year)
     melted['value'] = pd.to_numeric(melted['value'], errors='coerce')
     
+    # year 기준으로 정렬하면 이제 2008 -> 2009 -> ... -> 2022 순서로 정렬됩니다.
     return melted.dropna(subset=['year', 'value']).sort_values('year')
 
 # --- 6. 시각화 실행 ---
