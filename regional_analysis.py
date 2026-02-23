@@ -6,12 +6,14 @@ import re
 import os
 
 # --- 1. 페이지 설정 및 데이터 로드 ---
-st.set_page_config(page_title="지역 데이터베이스 분석 시스템", layout="wide")
+st.set_page_config(page_title="지역별 통합 데이터 분석 시스템", layout="wide")
 
 @st.cache_data
 def load_combined_data():
     mental_file = "(26-02-23)regional_data.xlsx"
     econ_file = "(26-02-23)data_for_econ.xlsx"
+    klosa_file = "(26-02-23)KLoSA.xlsx" # KLoSA 파일 추가
+    
     base_path = os.path.dirname(os.path.abspath(__file__))
     
     def get_df(file_name, sheet):
@@ -20,17 +22,21 @@ def load_combined_data():
         return pd.read_excel(path, sheet_name=sheet, engine='openpyxl')
 
     try:
-        # 데이터 로드
+        # 1. 데이터 로드
         sido_m = get_df(mental_file, "시도")
         sigungu_m = get_df(mental_file, "시군구")
         sido_e = get_df(econ_file, "시도")
         sigungu_e = get_df(econ_file, "시군구")
+        df_klosa = get_df(klosa_file, "Sheet3") # KLoSA 데이터 로드
 
-        # 경제 데이터 컬럼명 정리
+        # 2. 컬럼명 정리 및 병합
         if '시도별' in sido_e.columns: sido_e = sido_e.rename(columns={'시도별': '시도'})
         
-        # 데이터 병합
+        # 시도 데이터 통합 (정신건강 + 경제 + KLoSA)
         df_sido = pd.merge(sido_m, sido_e, on="시도", how="outer")
+        df_sido = pd.merge(df_sido, df_klosa, on="시도", how="outer")
+        
+        # 시군구 데이터 통합 (정신건강 + 경제)
         df_sigungu = pd.merge(sigungu_m, sigungu_e, on="시군구", how="outer")
         
         return df_sido, df_sigungu
@@ -41,15 +47,15 @@ def load_combined_data():
 df_sido, df_sigungu = load_combined_data()
 if df_sido is None: st.stop()
 
-# --- 2. 변수 매핑 (시도 전용 맵 적용) ---
-# 사용자가 제공한 맵을 기본으로 하되, 시군구에서는 데이터가 없는 3, 4번 카테고리를 제외하도록 구성합니다.
-SIDO_VARIABLES_MAP = {
-    "1. 인구 및 사회경제적 배경": ["총인구수", "근로소득", "인당근로소득", "1인당_GRDP", "GRDP_실질", "경제성장률"],
+# --- 2. 변수 매핑 (7. KLoSA 항목 추가) ---
+VARIABLES_MAP = {
+    "1. 인구 및 사회경제적 배경": ["총인구수", "근로소득", "인당근로소득", "1인당_GRDP", "GRDP_실질", "경제성장률", "GRDP"],
     "2. 정신건강 결과 지표": ["자살률", "우울경험", "스트레스"],
     "3. 정신질환 치료 및 의료 이용": ["치료_", "입원및외래_", "정신의료기관"],
     "4. 등록 장애인 현황": ["등록정신장애인수"],
     "5. 인력 및 예산": ["정신건강복지센터", "결산", "예산", "관리자"],
-    "6. 건강생활실태 및 기타": ["비만", "건강수준", "흡연율", "범죄발생"]
+    "6. 건강생활실태 및 기타": ["비만", "건강수준", "흡연율", "범죄발생"],
+    "7. KLoSA (고령화패널)": ["평균연령", "KLoSA_", "Health_", "SubHealth_", "WorkLimit_", "depav_", "정신질환진단", "SatOver_", "Income_평균", "우울위험군_"]
 }
 
 def get_base_name(column_name):
