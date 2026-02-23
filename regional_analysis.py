@@ -113,51 +113,70 @@ if selected_all_vars and selected_regions:
     colors = px.colors.qualitative.Bold
 
     if "평균 추이" in view_mode:
-        for i, var in enumerate(selected_all_vars): # [수정] 들여쓰기 수정
+        # 지표별로 데이터의 '평균적인 크기'를 파악하여 축을 배정하기 위한 리스트
+        scales = []
+        
+        for i, var in enumerate(selected_all_vars):
             data = process_data_v2(current_df, selected_regions, var, loc_col)
             if data.empty: continue
             
             avg_data = data.groupby('year')['value'].mean().reset_index()
-            
-            # [핵심 보완] 지표가 2개일 때, 두 번째 지표(i=1)는 무조건 오른쪽 축(y2) 사용
-            # 이를 통해 '근로소득'과 '스트레스'의 단위 차이 문제를 해결합니다.
-            use_y2 = True if i >= 1 else False
-            yaxis_type = "y2" if use_y2 else "y"
-            
+            # 해당 지표의 중간값을 구해서 스케일 파악
+            median_val = avg_data['value'].median()
+            scales.append((var, avg_data, median_val))
+
+        # 스케일이 큰 지표가 뒤로 가도록 정렬 (선택 사항이나 시각화 안정성을 위해)
+        # 여기서는 단순히 첫 번째 지표는 왼쪽, 나머지는 값이 너무 차이나면 오른쪽으로 보냅니다.
+        
+        for i, (var, avg_data, m_val) in enumerate(scales):
+            # [해결책] 첫 번째 지표와 비교해서 값이 10배 이상 차이 나면 무조건 y2 사용
+            if i == 0:
+                yaxis_type = "y"
+            else:
+                # 첫 번째 지표의 중앙값과 현재 지표의 중앙값 비교
+                first_median = scales[0][2]
+                if abs(m_val / (first_median + 1e-9)) > 5 or abs(m_val / (first_median + 1e-9)) < 0.2:
+                    yaxis_type = "y2"
+                else:
+                    yaxis_type = "y"
+
             fig.add_trace(go.Scatter(
                 x=avg_data['year'], y=avg_data['value'], 
                 name=var, mode='lines+markers',
                 yaxis=yaxis_type,
                 line=dict(width=3, color=colors[i % len(colors)])
             ))
-            
-        # [수정] 레이아웃 설정 - 이중 축이 필요할 때만 yaxis2 활성화
-        layout_update = {
-            "xaxis": dict(title="연도", type='category'),
-            "yaxis": dict(title=selected_all_vars[0], side="left", showgrid=True),
-            "hovermode": "x unified",
-            "template": "plotly_white"
-        }
-        
-        if len(selected_all_vars) >= 2:
-            layout_update["yaxis2"] = dict(
-                title=selected_all_vars[1],
+
+        # 레이아웃 설정 보완
+        fig.update_layout(
+            xaxis=dict(title="연도", type='category'),
+            yaxis=dict(title="지표 1 (좌축)", side="left", showgrid=True),
+            yaxis2=dict(
+                title="지표 2 (우축)",
                 anchor="x",
                 overlaying="y",
                 side="right",
-                showgrid=False
-            )
-        fig.update_layout(**layout_update)
+                showgrid=False,
+                autorange=True # 축 범위를 데이터에 맞게 자동 조절
+            ),
+            hovermode="x unified",
+            template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
 
     else:
-        # 지역별 개별 비교 모드 (한 가지 지표만 사용)
+        # 지역별 개별 비교 (동일 지표이므로 깨질 일 없음)
         target_var = selected_all_vars[0]
         data = process_data_v2(current_df, selected_regions, target_var, loc_col)
         for i, reg in enumerate(selected_regions):
             reg_data = data[data[loc_col] == reg].sort_values('year')
             fig.add_trace(go.Scatter(x=reg_data['year'], y=reg_data['value'], name=reg, mode='lines+markers'))
-        fig.update_layout(title=f"지역별 {target_var} 추이", xaxis_type='category', template="plotly_white")
+        
+        fig.update_layout(
+            title=f"지역별 {target_var} 추이",
+            xaxis_type='category',
+            yaxis=dict(autorange=True), # 여기서도 자동 범위 설정
+            template="plotly_white"
+        )
 
     st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("💡 왼쪽에서 지역을 선택하고 위 상자에서 지표를 클릭하세요.")
